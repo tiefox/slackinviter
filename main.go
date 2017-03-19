@@ -3,10 +3,12 @@ package main
 import (
 	"bytes"
 	"expvar"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"text/template"
 	"time"
 
@@ -18,6 +20,7 @@ import (
 )
 
 var indexTemplate = template.Must(template.New("index.tmpl").ParseFiles("templates/index.tmpl"))
+var badgeTemplate = template.Must(template.New("badge.tmpl").ParseFiles("templates/badge.tmpl"))
 
 var (
 	api     *slack.Client
@@ -84,6 +87,7 @@ func main() {
 	mux.HandleFunc("/invite/", handleInvite)
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
 	mux.HandleFunc("/", enforceHTTPSFunc(homepage))
+	mux.HandleFunc("/badge.svg", enforceHTTPSFunc(badge))
 	mux.Handle("/debug/vars", http.DefaultServeMux)
 	err := http.ListenAndServe(":"+c.Port, handlers.CombinedLoggingHandler(os.Stdout, mux))
 	if err != nil {
@@ -141,6 +145,85 @@ func pollSlack() {
 	for {
 		time.Sleep(updateFromSlack())
 	}
+}
+
+//Badge renders the sv badge
+func badge(w http.ResponseWriter, r *http.Request) {
+	leftText := "slack"
+	color := "#E01563"
+	padding := 8
+	middleSeparator := 4
+	charSpacing := 7
+
+	rightText := fmt.Sprintf("%v/%v", strconv.Itoa(int(activeUserCount.Value())), strconv.Itoa(int(userCount.Value())))
+
+	var noActiveText string
+
+	if userCount.Value() > int64(0) {
+		noActiveText = fmt.Sprintf("%v", strconv.Itoa(int(userCount.Value())))
+	} else {
+		noActiveText = "-"
+	}
+
+	if activeUserCount.Value() == int64(0) {
+		rightText = noActiveText
+	}
+
+	leftWidth := padding + (charSpacing * len(leftText)) + middleSeparator
+	rightWidth := middleSeparator + (charSpacing * len(rightText)) + padding
+	totalWidth := leftWidth + rightWidth
+	leftTextWidth := leftWidth / 2
+	leftTextHeight := 14
+	rightTextWidth := leftWidth + rightWidth/2
+	rightTextHeight := 14
+	leftTextHeightPlusOne := leftTextHeight + 1
+	rightTextHeightPlusOne := rightTextHeight + 1
+
+	var buf bytes.Buffer
+	err := badgeTemplate.Execute(
+		&buf,
+		struct {
+			TotalWidth             string
+			LeftWidth              string
+			RightWidth             string
+			MiddleSeparator        string
+			Color                  string
+			LeftTextWidth          string
+			LeftTextHeight         string
+			LeftTextHeightPlusOne  string
+			RightTextWidth         string
+			RightTextHeight        string
+			RightTextHeightPlusOne string
+			RightText              string
+			LeftText               string
+			UserCount              string
+			ActiveCount            string
+		}{
+			strconv.Itoa(totalWidth),
+			strconv.Itoa(leftWidth),
+			strconv.Itoa(rightWidth),
+			strconv.Itoa(middleSeparator),
+			color,
+			strconv.Itoa(leftTextWidth),
+			strconv.Itoa(leftTextHeight),
+			strconv.Itoa(leftTextHeightPlusOne),
+			strconv.Itoa(rightTextWidth),
+			strconv.Itoa(rightTextHeight),
+			strconv.Itoa(rightTextHeightPlusOne),
+			rightText,
+			leftText,
+			userCount.String(),
+			activeUserCount.String(),
+		},
+	)
+	if err != nil {
+		log.Println("error rendering template:", err)
+		http.Error(w, "error rendering template :-(", http.StatusInternalServerError)
+		return
+	}
+	// Set the header and write the buffer to the http.ResponseWriter
+	w.Header().Set("Content-Type", "image/svg+xml; charset=utf-8")
+	buf.WriteTo(w)
 }
 
 // Homepage renders the homepage

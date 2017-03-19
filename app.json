@@ -4,9 +4,9 @@
   "logo": "https://i.imgur.com/8mRVeMn.png",
   "keywords": ["go", "slack"],
   "image": "heroku/go:1.6",
-  "mount_dir": "http://github.com/flexd/slackinviter",
-  "website": "https://github.com/flexd/slackinviter",
-  "repository": "https://github.com/flexd/slackinviter",
+  "mount_dir": "http://github.com/tiefox/slackinviter",
+  "website": "https://github.com/tiefox/slackinviter",
+  "repository": "https://github.com/tiefox/slackinviter",
   "env": {
     "SLACKINVITER_SLACKTOKEN": {
       "description": "A Slack API token (find it on https://api.slack.com/web)",
